@@ -77,12 +77,12 @@ public class Client {
                             output.close();
 //                            getClientToSendMessage();
                             break;
-                        } else if (input.contains("prepare")) {
+                        } else if (input.contains("init")) {
                             jsonObject = new JSONObject();
                             jsonObject.put(Constants.sender, "Client");
                             jsonObject.put(Constants.receiver, machineName);
                             jsonObject.put(Constants.message, input);
-                            jsonObject.put(Constants.type, Constants.CLIENT_COMMIT);
+                            jsonObject.put(Constants.type, Constants.CLIENT_INIT);
                             output.writeUTF(jsonObject.toJSONString());
                             output.flush();
                             output.close();

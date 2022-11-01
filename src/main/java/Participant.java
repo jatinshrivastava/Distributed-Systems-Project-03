@@ -48,7 +48,7 @@ public class Participant {
                 public void run() {
                     if(state.equals(Constants.STATE_INIT)) {
                         System.err.println("Did not receive PREPARE message from the coordinator...Initiating Local Abort!!!\n");
-                        state = Constants.STATE_ABORT;
+                        state = Constants.STATE_LOCAL_ABORT;
                     }
                 }
             };
@@ -107,18 +107,23 @@ public class Participant {
                                         case Constants.STATE_GLOBAL_COMMIT:
                                             System.err.println("Received GLOBAL COMMIT...Committing!!!\n");
                                             state = Constants.STATE_COMMIT;
+                                            timer.cancel();
+                                            timer.purge();
                                             data = "";
+                                            requestAcknowledgement();
                                             break;
                                         case Constants.STATE_GLOBAL_ABORT:
                                             System.err.println("Received GLOBAL ABORT...Aborting!!!\n");
                                             state = Constants.STATE_ABORT;
+                                            timer.cancel();
+                                            timer.purge();
                                             data = "";
                                             break;
                                         case Constants.STATE_REQUEST_VOTE:
                                             data = message;
-                                            if (state == Constants.STATE_ABORT) {
+                                            if (state == Constants.STATE_LOCAL_ABORT) {
                                                 System.err.println("Participant was in Local Abort stage... Voting NO!!!\n");
-                                                voteAbort();
+                                                voteNo();
                                             } else {
                                                 System.out.println("Received VOTING REQUEST...\n");
                                                 timer.cancel();
@@ -150,19 +155,80 @@ public class Participant {
         }
     }
 
+    private static void requestAcknowledgement() {
+        System.out.println("01. Enter 1 to send acknowledgement of commit\n");
+        Scanner inputScanner = new Scanner(System.in);
+        String input = inputScanner.nextLine();
+        switch (input) {
+            case "1": {
+                Thread listeningThread = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            Socket socket = new Socket(Constants.localhostURL, Constants.coordinator_listening_port);
+                            DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+                            BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+
+                            JSONObject jsonObject = new JSONObject();
+                            jsonObject.put(Constants.sender, "Participant_"+port);
+                            jsonObject.put(Constants.receiver, "Coordinator");
+                            jsonObject.put(Constants.message, "");
+                            jsonObject.put(Constants.type, Constants.ACKNOWLEDGEMENT);
+                            output.writeUTF(jsonObject.toJSONString());
+
+                            output.flush();
+                            output.close();
+                            socket.close();
+
+                            state = Constants.STATE_READY;
+
+                            timer = new Timer();
+                            TimerTask timerTask2 = new TimerTask() {
+                                @Override
+                                public void run() {
+                                    if(!decision.equals(Constants.STATE_GLOBAL_COMMIT) || !decision.equals(Constants.STATE_GLOBAL_ABORT)) {
+                                        System.err.println("Did not receive decision from the coordinator...Initiating Local Abort!!!\n");
+                                        state = Constants.STATE_LOCAL_ABORT;
+                                    }
+                                }
+                            };
+
+                            timer.schedule(timerTask2, 60000);
+
+                        } catch (UnknownHostException e) {
+                            System.err.println("UnknownHostException:");
+                            e.printStackTrace();
+                            throw new RuntimeException(e);
+                        } catch (IOException e) {
+                            System.err.println("IOException:");
+                            e.printStackTrace();
+                            throw new RuntimeException(e);
+                        }
+                    }
+                });
+                listeningThread.start();
+                break;
+            }
+            default:
+                System.out.println("Invalid input! Please try again!");
+                requestAcknowledgement();
+                break;
+        }
+    }
+
     private static void getParticipantVote() {
-        System.out.println("01. Enter 1 to vote for COMMIT. \n02. Enter 2 to vote for ABORT.\n");
+        System.out.println("01. Enter 1 to vote for YES. \n02. Enter 2 to vote for NO.\n");
         inputScanner = new Scanner(System.in);
         String input = inputScanner.nextLine();
         switch (input) {
             case "1": {
                 System.out.println("Voting YES!!!");
-                voteCommit();
+                voteYes();
                 break;
             }
             case "2": {
                 System.err.println("Voting NO!!!");
-                voteAbort();
+                voteNo();
                 break;
             }
             default:
@@ -172,7 +238,7 @@ public class Participant {
         }
     }
 
-    private static void voteCommit() {
+    private static void voteYes() {
         if (state.equals(Constants.STATE_READY) || (data.trim().isEmpty() || data.equals(""))) {
             System.err.println("Can't vote right now!!!");
         } else {
@@ -188,7 +254,7 @@ public class Participant {
                         jsonObject.put(Constants.sender, "Participant_"+port);
                         jsonObject.put(Constants.receiver, "Coordinator");
                         jsonObject.put(Constants.message, "");
-                        jsonObject.put(Constants.type, Constants.STATE_COMMIT);
+                        jsonObject.put(Constants.type, Constants.VOTE_YES);
                         output.writeUTF(jsonObject.toJSONString());
 
                         output.flush();
@@ -203,7 +269,7 @@ public class Participant {
                             public void run() {
                                 if(!decision.equals(Constants.STATE_GLOBAL_COMMIT) || !decision.equals(Constants.STATE_GLOBAL_ABORT)) {
                                     System.err.println("Did not receive decision from the coordinator...Initiating Local Abort!!!\n");
-                                    state = Constants.STATE_ABORT;
+                                    state = Constants.STATE_LOCAL_ABORT;
                                 }
                             }
                         };
@@ -225,7 +291,7 @@ public class Participant {
         }
     }
 
-    private static void voteAbort() {
+    private static void voteNo() {
         if (!(data.trim().isEmpty() || data.equals(""))) {
             Thread listeningThread = new Thread(new Runnable() {
                 @Override
@@ -238,7 +304,7 @@ public class Participant {
                         jsonObject.put(Constants.sender, "Participant_" + port);
                         jsonObject.put(Constants.receiver, "Coordinator");
                         jsonObject.put(Constants.message, "");
-                        jsonObject.put(Constants.type, Constants.STATE_ABORT);
+                        jsonObject.put(Constants.type, Constants.VOTE_NO);
                         output.writeUTF(jsonObject.toJSONString());
 
                         output.flush();
