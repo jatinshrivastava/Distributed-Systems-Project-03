@@ -3,12 +3,16 @@
 ### UTA ID: 1002032011
 <br />
 
-# Distributed-Systems-Project-01
-#### CSE 5306: Distributed Systems Project 01: Demonstrating a Client-Machine2 model utilizing Remote Procedure Call (RPC) based communication. The services include File Upload, Download, Delete, Rename and performing synchronous and asynchronous computations such as Adding two numbers and Sorting an array.
+### Member 2 Name: Aditya Vikram Bhat
+### UTA ID: 1002014494
+
+# Distributed-Systems-Project-03
+#### CSE 5306: Distributed Systems Project 03: Implementation of a 2-phase distributed commit(2PC) protocol and with controlled and randomly injected failures.
 
 # Detailed Instructions to Compile and Run the code
     1. Install the Maven dependencies.
     2. Build the project by clicking on Build > Build Project.
-    3. Run Machine1.java, Machine2.java, and Machine3.java.
-    4. Follow the instructions displayed in the client console.
+    3. Run Coordinator.java, Client.java, and Participant.java.
+    4. You can run multiple instances of Participant.java.
+    5. Follow the instructions displayed in the client console.
         
