@@ -3,16 +3,12 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import values.Constants;
 
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.Scanner;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.time.Instant;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,6 +21,10 @@ public class Participant {
     private static String state = Constants.STATE_INIT;
     private static String decision = "";
     private static String data = "";
+    private static FileReader fr;
+    private static FileWriter fw;
+    private static BufferedReader br;
+    private static BufferedWriter bw;
 
     public static void main(String[] args) {
         try {
@@ -81,6 +81,15 @@ public class Participant {
     }
 
     private static void initListeningClient(int port) throws IOException {
+        File f = new File("Participant_" +port+".log");
+        f.createNewFile();
+
+        fr = new FileReader(f);
+        br = new BufferedReader(fr);
+
+        fw = new FileWriter(f, true);
+        bw = new BufferedWriter(fw);
+
         ServerSocket serverSocket = new ServerSocket(port);
         int count = 4;
         while (count != 0) {
@@ -110,6 +119,20 @@ public class Participant {
                                             timer.cancel();
                                             timer.purge();
                                             data = "";
+
+                                            JSONObject jsonObj0 = new JSONObject();
+                                            jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
+                                            jsonObj0.put(Constants.type, Constants.STATE_GLOBAL_COMMIT);
+                                            jsonObj0.put(Constants.sender, "Coordinator");
+
+                                            try {
+                                                bw.write(jsonObj0.toJSONString());
+                                                bw.newLine();
+                                                bw.flush();
+                                            } catch (Exception e) {
+                                                System.err.println("error in writing data");
+                                            }
+
                                             requestAcknowledgement();
                                             break;
                                         case Constants.STATE_GLOBAL_ABORT:
@@ -118,6 +141,20 @@ public class Participant {
                                             timer.cancel();
                                             timer.purge();
                                             data = "";
+
+                                            JSONObject jsonObj1 = new JSONObject();
+                                            jsonObj1.put(Constants.timeStamp, Instant.now().toEpochMilli());
+                                            jsonObj1.put(Constants.type, Constants.STATE_GLOBAL_ABORT);
+                                            jsonObj1.put(Constants.sender, "Coordinator");
+
+                                            try {
+                                                bw.write(jsonObj1.toJSONString());
+                                                bw.newLine();
+                                                bw.flush();
+                                            } catch (Exception e) {
+                                                System.err.println("error in writing data");
+                                            }
+
                                             break;
                                         case Constants.STATE_REQUEST_VOTE:
                                             data = message;
@@ -128,6 +165,20 @@ public class Participant {
                                                 System.out.println("Received VOTING REQUEST...\n");
                                                 timer.cancel();
                                                 timer.purge();
+
+                                                JSONObject jsonObj2 = new JSONObject();
+                                                jsonObj2.put(Constants.timeStamp, Instant.now().toEpochMilli());
+                                                jsonObj2.put(Constants.type, Constants.PREPARE);
+                                                jsonObj2.put(Constants.sender, "Coordinator");
+
+                                                try {
+                                                    bw.write(jsonObj2.toJSONString());
+                                                    bw.newLine();
+                                                    bw.flush();
+                                                } catch (Exception e) {
+                                                    System.err.println("error in writing data");
+                                                }
+
                                                 getParticipantVote();
                                             }
                                             break;
@@ -153,6 +204,36 @@ public class Participant {
             pool.execute(listeningThread);
 //            listeningThread.start();
         }
+
+        readLog();
+    }
+
+    private static void readLog(){
+        String lastLine = "null", line = "";
+
+
+        try {
+            BufferedReader input = new BufferedReader(new FileReader("Participant_"+port+".log"));
+            while ((line = input.readLine()) != null) {
+                lastLine = line;
+            }
+        } catch (Exception e) {
+
+        }
+        if (!lastLine.isEmpty()) {
+            try {
+                JSONParser jsonParser = new JSONParser();
+                JSONObject jsonObject = (JSONObject) jsonParser.parse(lastLine);
+                if (jsonObject.get(Constants.type).equals(Constants.STATE_GLOBAL_COMMIT)) {
+                    System.out.println("Node failed without acknowledgement");
+                    requestAcknowledgement();
+                }
+            } catch (Exception e) {
+                    System.out.println("exception!!!!!");
+//                    e.printStackTrace();
+            }
+        }
+
     }
 
     private static void requestAcknowledgement() {
@@ -207,6 +288,20 @@ public class Participant {
                     }
                 });
                 listeningThread.start();
+
+                JSONObject jsonObj0 = new JSONObject();
+                jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
+                jsonObj0.put(Constants.type, Constants.ACKNOWLEDGEMENT);
+                jsonObj0.put(Constants.sender, "Participant_"+port);
+
+                try {
+                    bw.write(jsonObj0.toJSONString());
+                    bw.newLine();
+                    bw.flush();
+                } catch (Exception e) {
+                    System.err.println("error in writing data");
+                }
+
                 break;
             }
             default:
@@ -288,6 +383,19 @@ public class Participant {
                 }
             });
             listeningThread.start();
+
+            JSONObject jsonObj0 = new JSONObject();
+            jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
+            jsonObj0.put(Constants.type, Constants.VOTE_YES);
+            jsonObj0.put(Constants.sender, "Participant_"+port);
+
+            try {
+                bw.write(jsonObj0.toJSONString());
+                bw.newLine();
+                bw.flush();
+            } catch (Exception e) {
+                System.err.println("error in writing data");
+            }
         }
     }
 
@@ -324,6 +432,20 @@ public class Participant {
                 }
             });
             listeningThread.start();
+
+            JSONObject jsonObj0 = new JSONObject();
+            jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
+            jsonObj0.put(Constants.type, Constants.VOTE_NO);
+            jsonObj0.put(Constants.sender, "Participant_"+port);
+
+            try {
+                bw.write(jsonObj0.toJSONString());
+                bw.newLine();
+                bw.flush();
+            } catch (Exception e) {
+                System.err.println("error in writing data");
+            }
+
         } else {
             System.err.println("Can't vote right now!!!");
         }

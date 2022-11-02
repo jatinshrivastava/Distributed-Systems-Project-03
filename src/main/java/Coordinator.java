@@ -407,12 +407,12 @@ public class Coordinator {
                         socket.close();
                     } catch (UnknownHostException e) {
                         System.err.println("UnknownHostException:");
-                        e.printStackTrace();
-                        throw new RuntimeException(e);
+//                        e.printStackTrace();
+//                        throw new RuntimeException(e);
                     } catch (IOException e) {
-                        System.err.println("IOException:");
-                        e.printStackTrace();
-                        throw new RuntimeException(e);
+                        System.err.println(participantsList.get(participant)+ " Down.");
+//                        e.printStackTrace();
+//                        throw new RuntimeException(e);
                     }
                 }
             });
