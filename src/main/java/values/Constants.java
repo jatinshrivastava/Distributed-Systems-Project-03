@@ -16,6 +16,7 @@ public class Constants {
      public static final String STATE_COMMIT = "COMMIT";
      public static final String GET = "GET";
      public static final String PUT = "PUT";
+     public static final String timeStamp = "timeStamp";
      public static final String STATE_ABORT = "ABORT";
      public static final String STATE_GLOBAL_COMMIT = "GLOBAL_COMMIT";
      public static final String STATE_GLOBAL_ABORT = "GLOBAL_ABORT";

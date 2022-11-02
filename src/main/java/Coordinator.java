@@ -9,6 +9,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -93,6 +94,7 @@ public class Coordinator {
                 }
 
                 JSONObject jsonObject = new JSONObject();
+                jsonObject.put(Constants.timeStamp, Instant.now().toEpochMilli());
                 jsonObject.put(Constants.type, Constants.PREPARE);
                 jsonObject.put(Constants.sent, sentList);
                 jsonObject.put(Constants.unSent, unSentList);
@@ -205,6 +207,7 @@ public class Coordinator {
 //                                            sendAbort();
 
                                             JSONObject jsonObj0 = new JSONObject();
+                                            jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
                                             jsonObj0.put(Constants.type, Constants.VOTE_NO);
                                             jsonObj0.put(Constants.sender, participantsList.get(senderName));
 
@@ -227,7 +230,8 @@ public class Coordinator {
                                             votes.put(senderName, Constants.VOTE_YES);
 
                                             JSONObject jsonObj1 = new JSONObject();
-                                            jsonObj1.put(Constants.type, Constants.STATE_COMMIT);
+                                            jsonObj1.put(Constants.timeStamp, Instant.now().toEpochMilli());
+                                            jsonObj1.put(Constants.type, Constants.VOTE_YES);
                                             jsonObj1.put(Constants.sender, participantsList.get(senderName));
 
                                             try {
@@ -240,13 +244,15 @@ public class Coordinator {
 
                                             int counter = 0;
                                             for (String participant: votes.keySet()) {
-                                                if(votes.get(participant).equals(Constants.STATE_COMMIT)) {
+                                                if(votes.get(participant).equals(Constants.VOTE_YES)) {
                                                     counter++;
                                                 } else {
                                                     break;
                                                 }
                                             }
 
+                                            System.out.println("votes is: "+ votes);
+                                            System.out.println("counter is: "+ counter);
                                             if (counter == votes.size()) {
                                                 System.err.println("All participants voted Yes...Initiating Global Commit!!!\n");
                                                 selectParticipants(false);
@@ -262,6 +268,7 @@ public class Coordinator {
                                             System.out.println(senderName + " sent Acknowledgement");
 
                                             JSONObject jsonObj2 = new JSONObject();
+                                            jsonObj2.put(Constants.timeStamp, Instant.now().toEpochMilli());
                                             jsonObj2.put(Constants.type, Constants.ACKNOWLEDGEMENT);
                                             jsonObj2.put(Constants.sender, participantsList.get(senderName));
 
@@ -301,10 +308,8 @@ public class Coordinator {
     }
 
     private static void readLog(){
-        boolean failureFound = false;
-
         List<String> stringList = new ArrayList<String>();
-
+        boolean lastCommitFound = false;
 
         try {
             String string;
@@ -315,20 +320,35 @@ public class Coordinator {
         } catch (Exception e) {
 
         }
-
         if (!stringList.isEmpty()) {
-            for (int i=stringList.size()-1; i>=0; i++) {
+            for (int i=stringList.size()-1; i>=0; i--) {
                 try {
                     JSONParser jsonParser = new JSONParser();
                     JSONObject jsonObject = (JSONObject) jsonParser.parse(stringList.get(i));
                     if (jsonObject.get(Constants.type).equals(Constants.STATE_COMMIT)) {
+                        lastCommitFound = true;
                         System.out.println("Last commit object was: "+ jsonObject);
-                        ArrayList<Integer> unSentList = (ArrayList<Integer>) jsonObject.get(Constants.unSent);
+                        ArrayList<Long> unSentList = (ArrayList<Long>) jsonObject.get(Constants.unSent);
+                        ArrayList<Long> sendList = (ArrayList<Long>) jsonObject.get(Constants.sent);
+                        JSONObject participantList = (JSONObject) jsonObject.get(Constants.participants);
+                        HashMap<String, Integer> pMap = new HashMap<>();
+                        for (Object participant: participantList.keySet()) {
+                            Integer port = Integer.valueOf(participantList.get(participant).toString());
+                            pMap.put(participant.toString(), port);
+                        }
                         if (!unSentList.isEmpty()) {
-                            sendRemainingCommit(unSentList);
+//                            deleteLastLog();
+                            sendRemainingCommit(unSentList, sendList, participantList);
                         }
                     }
-                } catch (Exception e) {}
+                } catch (Exception e) {
+//                    System.out.println("exception!!!!!");
+//                    e.printStackTrace();
+                }
+
+                if (lastCommitFound) {
+                    break;
+                }
             }
         }
 
@@ -411,6 +431,7 @@ public class Coordinator {
         }
 
         JSONObject jsonObject = new JSONObject();
+        jsonObject.put(Constants.timeStamp, Instant.now().toEpochMilli());
         jsonObject.put(Constants.type, Constants.STATE_COMMIT);
         jsonObject.put(Constants.sent, sentList);
         jsonObject.put(Constants.unSent, unSentList);
@@ -467,21 +488,28 @@ public class Coordinator {
         timer.purge();
     }
 
-    private static void sendRemainingCommit(ArrayList<Integer> uList) {
+    private static void sendRemainingCommit(ArrayList<Long> uList, ArrayList<Long> sList, HashMap<String, Integer> pList) {
         System.out.println("Sending remaining commit to: " + uList);
+        participantsList = pList;
+
         JSONArray sentList = new JSONArray();
-        JSONArray unSentList = new JSONArray();
+        JSONObject participantsObj = new JSONObject();
         for (String participant: participantsList.keySet()) {
+            participantsObj.put(participant, participantsList.get(participant));
+        }
+
+        for (int i = 0; i < uList.size(); i++) {
+            int finalI = i;
+            String participantName = "Participant_"+ uList.get(finalI);
             Thread listeningThread = new Thread(new Runnable() {
                 @Override
                 public void run() {
                     try {
-                        Socket socket = new Socket(Constants.localhostURL, participantsList.get(participant));
+                        Socket socket = new Socket(Constants.localhostURL, Math.toIntExact(uList.get(finalI)));
                         DataOutputStream output = new DataOutputStream(socket.getOutputStream());
-
                         JSONObject jsonObject = new JSONObject();
                         jsonObject.put(Constants.sender, "Coordinator");
-                        jsonObject.put(Constants.receiver, participant);
+                        jsonObject.put(Constants.receiver, participantName);
                         jsonObject.put(Constants.message, "");
                         jsonObject.put(Constants.type, Constants.STATE_GLOBAL_COMMIT);
                         output.writeUTF(jsonObject.toJSONString());
@@ -500,20 +528,23 @@ public class Coordinator {
                     }
                 }
             });
-//            listeningThread.start();
-            System.out.println("participantsList.get(participant)) is " + participantsList.get(participant));
-            if (uList.contains(participantsList.get(participant))) {
-                System.out.println("sending to " + participant);
-                listeningThread.start();
-            }
-            participantsList.get(participant);
+            System.out.println("Sent to: "+ participantName);
+            listeningThread.start();
+            sentList.add(Math.toIntExact(uList.get(finalI)));
         }
 
         JSONObject jsonObject = new JSONObject();
+        JSONArray unSentList = new JSONArray();
+
+        sList.forEach((element) -> {
+            sentList.add(element);
+        });
+
+        jsonObject.put(Constants.timeStamp, Instant.now().toEpochMilli());
         jsonObject.put(Constants.type, Constants.STATE_COMMIT);
         jsonObject.put(Constants.sent, sentList);
         jsonObject.put(Constants.unSent, unSentList);
-        deleteLastLog();
+        jsonObject.put(Constants.participants, participantsObj);
         try {
             bw.write(jsonObject.toJSONString());
             bw.newLine();
