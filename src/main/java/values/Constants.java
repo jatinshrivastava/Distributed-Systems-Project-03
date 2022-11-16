@@ -8,6 +8,7 @@ public class Constants {
      public static final String localhostURL = "localhost";
      public static final String CLIENT_INIT = "CLIENT_INIT";
      public static final String STATE_REQUEST_VOTE = "REQUEST_VOTE";
+     public static final String STATE_REQUEST_COMMIT = "STATE_REQUEST_COMMIT";
      public static final String ACKNOWLEDGEMENT = "ACKNOWLEDGEMENT";
      public static final String STATE_WAITING = "WAITING";
      public static final String PREPARE = "PREPARE";

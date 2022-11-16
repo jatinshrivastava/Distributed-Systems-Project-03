@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Participant {
 
@@ -210,7 +211,16 @@ public class Participant {
 
     private static void readLog(){
         String lastLine = "null", line = "";
+        String corLastLine = "null", corLine = "";
 
+        try {
+            BufferedReader corInput = new BufferedReader(new FileReader("coordinator.log"));
+            while ((corLine = corInput.readLine()) != null) {
+                corLastLine = corLine;
+            }
+        } catch (Exception e) {
+
+        }
 
         try {
             BufferedReader input = new BufferedReader(new FileReader("Participant_"+port+".log"));
@@ -224,9 +234,23 @@ public class Participant {
             try {
                 JSONParser jsonParser = new JSONParser();
                 JSONObject jsonObject = (JSONObject) jsonParser.parse(lastLine);
-                if (jsonObject.get(Constants.type).equals(Constants.STATE_GLOBAL_COMMIT)) {
-                    System.out.println("Node failed without acknowledgement");
-                    requestAcknowledgement();
+                JSONObject corJsonObject = (JSONObject) jsonParser.parse(corLastLine);
+                if (corJsonObject.get(Constants.type).equals(Constants.STATE_COMMIT)) {
+                    ArrayList<Long> sendList = (ArrayList<Long>) corJsonObject.get(Constants.sent);
+                    AtomicBoolean portPresent = new AtomicBoolean(false);
+                    sendList.forEach((element) -> {
+                        if (element.toString().equals(port.toString())) {
+                            portPresent.set(true);
+                        }
+                    });
+                    if (portPresent.get()) {
+                        System.out.println("Node failed without receiving commit. Requesting commit again!");
+                        requestCommitMessage();
+                    } else if (jsonObject.get(Constants.type).equals(Constants.STATE_GLOBAL_COMMIT)) {
+                        System.out.println("Node failed without acknowledgement");
+                        requestAcknowledgement();
+                    }
+
                 }
             } catch (Exception e) {
                     System.out.println("exception!!!!!");
@@ -234,6 +258,68 @@ public class Participant {
             }
         }
 
+    }
+
+    private static void requestCommitMessage() {
+        Thread listeningThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Socket socket = new Socket(Constants.localhostURL, Constants.coordinator_listening_port);
+                    DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+                    BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(System.in));
+
+                    JSONObject jsonObject = new JSONObject();
+                    jsonObject.put(Constants.sender, "Participant_"+port);
+                    jsonObject.put(Constants.receiver, "Coordinator");
+                    jsonObject.put(Constants.message, "");
+                    jsonObject.put(Constants.type, Constants.STATE_REQUEST_COMMIT);
+                    output.writeUTF(jsonObject.toJSONString());
+
+                    output.flush();
+                    output.close();
+                    socket.close();
+
+                    state = Constants.STATE_READY;
+
+                    timer = new Timer();
+                    TimerTask timerTask2 = new TimerTask() {
+                        @Override
+                        public void run() {
+                            if(!decision.equals(Constants.STATE_GLOBAL_COMMIT) || !decision.equals(Constants.STATE_GLOBAL_ABORT)) {
+                                System.err.println("Did not receive decision from the coordinator...Initiating Local Abort!!!\n");
+                                state = Constants.STATE_LOCAL_ABORT;
+                            }
+                        }
+                    };
+
+                    timer.schedule(timerTask2, 60000);
+
+                } catch (UnknownHostException e) {
+                    System.err.println("UnknownHostException:");
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                } catch (IOException e) {
+                    System.err.println("IOException:");
+                    e.printStackTrace();
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        listeningThread.start();
+
+        JSONObject jsonObj0 = new JSONObject();
+        jsonObj0.put(Constants.timeStamp, Instant.now().toEpochMilli());
+        jsonObj0.put(Constants.type, Constants.STATE_GLOBAL_COMMIT);
+        jsonObj0.put(Constants.sender, "Coordinator");
+
+        try {
+            bw.write(jsonObj0.toJSONString());
+            bw.newLine();
+            bw.flush();
+        } catch (Exception e) {
+            System.err.println("error in writing data");
+        }
     }
 
     private static void requestAcknowledgement() {

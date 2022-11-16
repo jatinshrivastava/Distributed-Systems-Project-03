@@ -224,6 +224,12 @@ public class Coordinator {
                                             }
 
                                             break;
+                                        case Constants.STATE_REQUEST_COMMIT:
+                                            System.out.println(senderName + " Requested for commit.");
+
+                                            sendCommitToOne(senderName);
+
+                                            break;
                                         case Constants.VOTE_YES:
                                             System.out.println(senderName + " voted Yes.");
 
@@ -380,6 +386,63 @@ public class Coordinator {
                 selectParticipants(isAbort);
                 break;
         }
+    }
+
+    private static void sendCommitToOne(String participant) {
+        JSONArray sentList = new JSONArray();
+        JSONArray unSentList = new JSONArray();
+        JSONObject participants = new JSONObject();
+
+
+        Thread listeningThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Socket socket = new Socket(Constants.localhostURL, participantsList.get(participant));
+                    DataOutputStream output = new DataOutputStream(socket.getOutputStream());
+
+                    JSONObject jsonObject = new JSONObject();
+                    jsonObject.put(Constants.sender, "Coordinator");
+                    jsonObject.put(Constants.receiver, participant);
+                    jsonObject.put(Constants.message, "");
+                    jsonObject.put(Constants.type, Constants.STATE_GLOBAL_COMMIT);
+                    output.writeUTF(jsonObject.toJSONString());
+
+                    output.flush();
+                    output.close();
+                    socket.close();
+                } catch (UnknownHostException e) {
+                    System.err.println("UnknownHostException:");
+//                        e.printStackTrace();
+//                        throw new RuntimeException(e);
+                } catch (IOException e) {
+                    System.err.println(participantsList.get(participant)+ " Down.");
+//                        e.printStackTrace();
+//                        throw new RuntimeException(e);
+                }
+            }
+        });
+        listeningThread.start();
+        sentList.add(participantsList.get(participant));
+
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put(Constants.timeStamp, Instant.now().toEpochMilli());
+        jsonObject.put(Constants.type, Constants.STATE_COMMIT);
+        jsonObject.put(Constants.sent, sentList);
+        jsonObject.put(Constants.unSent, unSentList);
+        jsonObject.put(Constants.participants, participants);
+
+        try {
+            bw.write(jsonObject.toJSONString());
+            bw.newLine();
+            bw.flush();
+        } catch (Exception e) {
+            System.err.println("error in writing data");
+        }
+
+        state = Constants.STATE_COMMIT;
+        timer.cancel();
+        timer.purge();
     }
 
     private static void sendCommit(boolean onlyOne) {
