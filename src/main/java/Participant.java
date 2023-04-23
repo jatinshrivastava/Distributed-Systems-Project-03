@@ -40,7 +40,7 @@ public class Participant {
 
             helperThread.start();
 
-            port = getValidPort(9000);
+            port = getValidPort(9001);
 
             timer = new Timer();
 
@@ -112,7 +112,6 @@ public class Participant {
                                     String senderName = (String) jsonObject.get(Constants.sender);
                                     String messageType = (String) jsonObject.get(Constants.type);
                                     String message = (String) jsonObject.get(Constants.message);
-
                                     switch (messageType) {
                                         case Constants.STATE_GLOBAL_COMMIT:
                                             System.err.println("Received GLOBAL COMMIT...Committing!!!\n");
@@ -235,7 +234,7 @@ public class Participant {
                 JSONParser jsonParser = new JSONParser();
                 JSONObject jsonObject = (JSONObject) jsonParser.parse(lastLine);
                 JSONObject corJsonObject = (JSONObject) jsonParser.parse(corLastLine);
-                if (corJsonObject.get(Constants.type).equals(Constants.STATE_COMMIT)) {
+                if (corJsonObject != null && corJsonObject.get(Constants.type).equals(Constants.STATE_COMMIT)) {
                     ArrayList<Long> sendList = (ArrayList<Long>) corJsonObject.get(Constants.sent);
                     AtomicBoolean portPresent = new AtomicBoolean(false);
                     sendList.forEach((element) -> {
@@ -254,7 +253,7 @@ public class Participant {
                 }
             } catch (Exception e) {
                     System.out.println("exception!!!!!");
-//                    e.printStackTrace();
+                    e.printStackTrace();
             }
         }
 
